@@ -1,0 +1,34 @@
+# mbserver
+
+fork from tbrandon/mbserver
+
+mbserver的go实现
+
+## Usage
+```go
+    s := NewServer()
+	s.Handler = func(c *Conn, out []byte) {
+		// handle response
+	}
+	s.AfterConnClose = func(sn string) {
+		// do something
+	}
+	s.OnStart = func() {
+		// do something
+	}
+
+	go func() {
+		err := s.StartServer("6500")
+		if err != nil {
+			log.Print(err.Error())
+		}
+	}()
+
+	// gracefully shutdown
+	// Wait for interrupt signal to gracefully shutdown the server with
+	// a timeout of 10 seconds.
+	quit := make(chan os.Signal)
+	signal.Notify(quit, syscall.SIGTERM, os.Interrupt)
+	<-quit
+	s.Shutdown()
+``` 
