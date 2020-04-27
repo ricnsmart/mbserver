@@ -93,7 +93,7 @@ func (srv *Server) Debug(debug bool) {
 func (srv *Server) StartServer(address string) error {
 	l, err := net.Listen("tcp", address)
 	if err != nil {
-		return fmt.Errorf(`mbserver: failed to listen port %v , reason: %v`, address, err)
+		return fmt.Errorf(`failed to listen port %v , reason: %v`, address, err)
 	}
 	defer l.Close()
 	srv.OnStart()
@@ -141,7 +141,7 @@ func (c *Conn) serve() {
 		default:
 			buf, err := c.read()
 			if err != nil {
-				Logger.Error("mbserver: failed to read from connection", zap.Error(err))
+				Logger.Error("failed to read from connection", zap.Error(err), zap.String("id", c.id), zap.String("remote_addr", c.RemoteAddr()))
 				c.Close()
 				return
 			}
