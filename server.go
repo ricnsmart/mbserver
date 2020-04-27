@@ -141,7 +141,7 @@ func (c *Conn) serve() {
 		default:
 			buf, err := c.read()
 			if err != nil {
-				logger.Error("mbserver: failed to read from connection", zap.Error(err))
+				Logger.Error("mbserver: failed to read from connection", zap.Error(err))
 				c.Close()
 				return
 			}
@@ -216,7 +216,7 @@ func (c *Conn) read() ([]byte, error) {
 	buf := make([]byte, c.server.MaxBytes)
 	defer func() {
 		if c.server.debug {
-			logger.Info(fmt.Sprintf(`0x% x`, buf), zap.String("action", "read"))
+			Logger.Info(fmt.Sprintf(`0x% x`, buf), zap.String("action", "read"))
 		}
 	}()
 	c.rwc.SetReadDeadline(time.Now().Add(c.server.Timeout))
@@ -234,7 +234,7 @@ func (c *Conn) Write(buf []byte) (n int, err error) {
 
 	defer func() {
 		if c.server.debug {
-			logger.Info(fmt.Sprintf(`0x% x`, buf), zap.String("action", "write"))
+			Logger.Info(fmt.Sprintf(`0x% x`, buf), zap.String("action", "write"))
 		}
 		// 等待1秒之后才允许其他协程使用Write方法
 		// 功能和c.Lock相仿，但是c.Lock仅用于调用方使用
