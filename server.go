@@ -16,8 +16,9 @@ const (
 )
 
 var (
-	DeviceOffline   = errors.New("设备离线")
-	ResponseTimeout = errors.New("响应超时")
+	DeviceOffline      = errors.New("device offline")
+	SendMessageTimeout = errors.New("send message timeout")
+	WaitMessageTimeout = errors.New("wait message timeout")
 )
 
 type (
@@ -197,7 +198,7 @@ func (c *Conn) Send(data []byte) error {
 	case c.bridgeChan <- data:
 		return nil
 	case <-time.NewTicker(5 * time.Second).C:
-		return ResponseTimeout
+		return SendMessageTimeout
 	}
 }
 
@@ -208,7 +209,7 @@ func (c *Conn) Receive() ([]byte, error) {
 	case buf := <-c.bridgeChan:
 		return buf, nil
 	case <-time.NewTicker(5 * time.Second).C:
-		return nil, ResponseTimeout
+		return nil, WaitMessageTimeout
 	}
 }
 
