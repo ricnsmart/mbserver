@@ -18,7 +18,7 @@ mbserver的go实现
 	}
 
 	go func() {
-		err := s.StartServer("6500")
+		err := s.StartServer(":6500")
 		if err != nil {
 			log.Print(err.Error())
 		}

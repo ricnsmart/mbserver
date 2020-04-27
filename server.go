@@ -2,7 +2,8 @@ package mbserver
 
 import (
 	"errors"
-	"log"
+	"fmt"
+	"go.uber.org/zap"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -12,6 +13,11 @@ import (
 const (
 	defaultMaxBytes = 500
 	defaultTimeout  = 3 * time.Minute
+)
+
+var (
+	DeviceOffline   = errors.New("设备离线")
+	ResponseTimeout = errors.New("响应超时")
 )
 
 type (
@@ -87,8 +93,7 @@ func (srv *Server) Debug(debug bool) {
 func (srv *Server) StartServer(address string) error {
 	l, err := net.Listen("tcp", address)
 	if err != nil {
-		log.Printf("iot_util: Failed to Listen: %v", err)
-		return err
+		return fmt.Errorf(`mbserver: failed to listen port %v , reason: %v`, address, err)
 	}
 	defer l.Close()
 	srv.OnStart()
@@ -105,7 +110,6 @@ func (srv *Server) StartServer(address string) error {
 				if max := 1 * time.Second; tempDelay > max {
 					tempDelay = max
 				}
-				log.Printf("iot_util: listen accept error: %v; retrying in %v", err, tempDelay)
 				time.Sleep(tempDelay)
 				continue
 			}
@@ -137,7 +141,7 @@ func (c *Conn) serve() {
 		default:
 			buf, err := c.read()
 			if err != nil {
-				log.Printf(`server: read from connection error: %v`, err)
+				logger.Error("mbserver: failed to read from connection", zap.Error(err))
 				c.Close()
 				return
 			}
@@ -166,7 +170,7 @@ func (srv *Server) FindConn(id string) (*Conn, error) {
 		return true
 	})
 	if c1.id == "" {
-		return nil, errors.New("设备离线")
+		return nil, DeviceOffline
 	}
 	return c1, nil
 }
@@ -189,22 +193,22 @@ func (c *Conn) SetID(id string) {
 func (c *Conn) Send(data []byte) error {
 	select {
 	case <-c.CloseNotifier:
-		return errors.New("设备离线")
+		return DeviceOffline
 	case c.bridgeChan <- data:
 		return nil
 	case <-time.NewTicker(5 * time.Second).C:
-		return errors.New("响应超时")
+		return ResponseTimeout
 	}
 }
 
 func (c *Conn) Receive() ([]byte, error) {
 	select {
 	case <-c.CloseNotifier:
-		return nil, errors.New("设备离线")
+		return nil, DeviceOffline
 	case buf := <-c.bridgeChan:
 		return buf, nil
 	case <-time.NewTicker(5 * time.Second).C:
-		return nil, errors.New("响应超时")
+		return nil, ResponseTimeout
 	}
 }
 
@@ -212,7 +216,7 @@ func (c *Conn) read() ([]byte, error) {
 	buf := make([]byte, c.server.MaxBytes)
 	defer func() {
 		if c.server.debug {
-			log.Printf(`read: % x`, buf)
+			logger.Info(fmt.Sprintf(`0x% x`, buf), zap.String("action", "read"))
 		}
 	}()
 	c.rwc.SetReadDeadline(time.Now().Add(c.server.Timeout))
@@ -230,7 +234,7 @@ func (c *Conn) Write(buf []byte) (n int, err error) {
 
 	defer func() {
 		if c.server.debug {
-			log.Printf(`write: % x`, buf)
+			logger.Info(fmt.Sprintf(`0x% x`, buf), zap.String("action", "write"))
 		}
 		// 等待1秒之后才允许其他协程使用Write方法
 		// 功能和c.Lock相仿，但是c.Lock仅用于调用方使用

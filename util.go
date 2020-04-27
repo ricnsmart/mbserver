@@ -2,9 +2,12 @@ package mbserver
 
 import (
 	"fmt"
+	"go.uber.org/zap"
 	"strings"
 	"time"
 )
+
+var logger *zap.Logger
 
 /*
 将物联网设备中常见的形如20, 3, 12, 17, 19, 00的字节流，转换为形如2020-03-12 17:19:00这样的格式

@@ -2,6 +2,7 @@ package mbserver
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 )
 
@@ -49,6 +50,7 @@ func (rs Registers) Encode(value string) ([]byte, error) {
 }
 
 func (rs Registers) Decode(data []byte, m map[string]interface{}) error {
+	l := uint16(len(data))
 	result := uint16(len(data)) - rs.GetNum()*2
 	switch {
 	case result == 0:
@@ -60,6 +62,9 @@ func (rs Registers) Decode(data []byte, m map[string]interface{}) error {
 			} else {
 				start := (r.GetStart() - rs.GetStart()) * 2
 				end := start + r.GetNum()*2
+				if start > l+1 || end > l+1 {
+					return fmt.Errorf(`字节流长度异常：register:%v,start：%v,end:%v,len:%v`, r.GetName(), start, end, l)
+				}
 				ro.Decode(data[start:end], m)
 			}
 		}
@@ -75,6 +80,9 @@ func (rs Registers) Decode(data []byte, m map[string]interface{}) error {
 			} else {
 				start := r.GetStart() * 2
 				end := start + r.GetNum()*2
+				if start > l+1 || end > l+1 {
+					return fmt.Errorf(`字节流长度异常：register:%v,start：%v,end:%v,len:%v`, r.GetName(), start, end, l)
+				}
 				ro.Decode(data[start:end], m)
 			}
 		}
