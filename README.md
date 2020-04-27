@@ -4,8 +4,13 @@ fork from tbrandon/mbserver
 
 mbserver的go实现
 
+依赖：zap日志
+
 ## Usage
 ```go
+    // 设置zap log
+	Logger=zap.NewExample()
+
     s := NewServer()
 	s.Handler = func(c *Conn, out []byte) {
 		// handle response

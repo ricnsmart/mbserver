@@ -1,6 +1,7 @@
 package mbserver
 
 import (
+	"go.uber.org/zap"
 	"log"
 	"os"
 	"os/signal"
@@ -9,7 +10,12 @@ import (
 )
 
 func TestServer_Serve(t *testing.T) {
+
+	// 设置zap log
+	Logger = zap.NewExample()
+
 	s := NewServer()
+
 	s.Handler = func(c *Conn, out []byte) {
 		// handle response
 	}
