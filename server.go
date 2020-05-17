@@ -38,9 +38,15 @@ type (
 		// 处理从连接读取出的数据
 		Handler func(c *Conn, out []byte)
 
+		// 保存所有活动连接
+		activeConn sync.Map
+
+		// 保存listener
+		Listener net.Listener
+
+		// 用于调用方执行收尾工作
 		AfterConnClose func(id string)
-		activeConn     sync.Map
-		OnStart        func()
+
 		// 是否打印报文
 		debug bool
 	}
@@ -64,7 +70,7 @@ type (
 		inShutdown int32 // accessed atomically (non-zero means we're in Shutdown)
 
 		// 用于和外界交换数据
-		bridgeChan chan []byte
+		bridgeCh chan []byte
 
 		// 资源读写锁，仅限调用方使用
 		sync.Mutex
@@ -76,7 +82,7 @@ type (
 		sync.Once
 
 		// 用于控制写入的频率
-		writeSignal chan bool
+		writeSignal chan struct{}
 	}
 )
 
@@ -97,7 +103,6 @@ func (srv *Server) StartServer(address string) error {
 		return fmt.Errorf(`failed to listen port %v , reason: %v`, address, err)
 	}
 	defer l.Close()
-	srv.OnStart()
 	var tempDelay time.Duration // how long to sleep on accept failure
 	for {
 		rwc, err := l.Accept()
@@ -129,27 +134,8 @@ func (srv *Server) newConn(rwc net.Conn) *Conn {
 		server:        srv,
 		rwc:           rwc,
 		CloseNotifier: make(chan struct{}),
-		bridgeChan:    make(chan []byte),
-		writeSignal:   make(chan bool, 1), // 必须要指定size，否则无法写入
-	}
-}
-
-func (c *Conn) serve() {
-	for {
-		select {
-		case <-c.CloseNotifier:
-			return
-		default:
-			buf, err := c.read()
-			if err != nil {
-				Logger.Error("failed to read from connection", zap.Error(err), zap.String("id", c.id), zap.String("remote_addr", c.RemoteAddr()))
-				c.Close()
-				return
-			}
-			// 必须用协程，否则设备的响应会无法及时处理，导致请求超时
-			// 另外调用房可能会误用，导致阻塞，从而使接下来的读取失败，导致超时
-			go c.server.Handler(c, buf)
-		}
+		bridgeCh:      make(chan []byte, 1),
+		writeSignal:   make(chan struct{}, 1), // 必须要指定size，否则无法写入
 	}
 }
 
@@ -176,6 +162,25 @@ func (srv *Server) FindConn(id string) (*Conn, error) {
 	return c1, nil
 }
 
+func (c *Conn) serve() {
+	for {
+		select {
+		case <-c.CloseNotifier:
+			return
+		default:
+			buf, err := c.read()
+			if err != nil {
+				Logger.Error("failed to read from connection", zap.Error(err), zap.String("id", c.id), zap.String("remote_addr", c.RemoteAddr()))
+				c.Close()
+				return
+			}
+			// 必须用协程，否则设备的响应会无法及时处理，导致请求超时
+			// 另外调用房可能会误用，导致阻塞，从而使接下来的读取失败，导致超时
+			go c.server.Handler(c, buf)
+		}
+	}
+}
+
 func (c *Conn) ID() string {
 	return c.id
 }
@@ -195,7 +200,7 @@ func (c *Conn) Send(data []byte) error {
 	select {
 	case <-c.CloseNotifier:
 		return DeviceOffline
-	case c.bridgeChan <- data:
+	case c.bridgeCh <- data:
 		return nil
 	case <-time.NewTicker(5 * time.Second).C:
 		return SendMessageTimeout
@@ -206,7 +211,7 @@ func (c *Conn) Receive() ([]byte, error) {
 	select {
 	case <-c.CloseNotifier:
 		return nil, DeviceOffline
-	case buf := <-c.bridgeChan:
+	case buf := <-c.bridgeCh:
 		return buf, nil
 	case <-time.NewTicker(5 * time.Second).C:
 		return nil, WaitMessageTimeout
@@ -231,7 +236,7 @@ func (c *Conn) read() ([]byte, error) {
 
 func (c *Conn) Write(buf []byte) (n int, err error) {
 	// 控制写入频率，防止粘包
-	c.writeSignal <- true
+	c.writeSignal <- struct{}{}
 
 	defer func() {
 		if c.server.debug {
