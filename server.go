@@ -59,7 +59,7 @@ type (
 		// *tls.Conn.
 		rwc net.Conn
 
-		CloseNotifier chan bool
+		CloseNotifier chan struct{}
 
 		inShutdown int32 // accessed atomically (non-zero means we're in Shutdown)
 
@@ -128,7 +128,7 @@ func (srv *Server) newConn(rwc net.Conn) *Conn {
 	return &Conn{
 		server:        srv,
 		rwc:           rwc,
-		CloseNotifier: make(chan bool),
+		CloseNotifier: make(chan struct{}),
 		bridgeChan:    make(chan []byte),
 		writeSignal:   make(chan bool, 1), // 必须要指定size，否则无法写入
 	}
